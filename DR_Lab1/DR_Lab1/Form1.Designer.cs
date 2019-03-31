@@ -35,6 +35,7 @@
             this.SearchLabel = new System.Windows.Forms.Label();
             this.TextSearch = new System.Windows.Forms.TextBox();
             this.label3 = new System.Windows.Forms.Label();
+            this.checkBoxLucene = new System.Windows.Forms.CheckBox();
             this.SuspendLayout();
             // 
             // luceneButton
@@ -65,7 +66,7 @@
             this.label2.AutoSize = true;
             this.label2.Font = new System.Drawing.Font("Segoe UI", 18F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(204)));
             this.label2.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.label2.Location = new System.Drawing.Point(23, 139);
+            this.label2.Location = new System.Drawing.Point(23, 187);
             this.label2.Name = "label2";
             this.label2.Size = new System.Drawing.Size(84, 32);
             this.label2.TabIndex = 11;
@@ -77,7 +78,7 @@
             this.ResultBox.FormattingEnabled = true;
             this.ResultBox.HorizontalScrollbar = true;
             this.ResultBox.ItemHeight = 22;
-            this.ResultBox.Location = new System.Drawing.Point(115, 139);
+            this.ResultBox.Location = new System.Drawing.Point(115, 187);
             this.ResultBox.Name = "ResultBox";
             this.ResultBox.Size = new System.Drawing.Size(627, 268);
             this.ResultBox.TabIndex = 10;
@@ -113,10 +114,23 @@
             this.label3.TabIndex = 14;
             this.label3.Text = "Upload from DB to Lucene:";
             // 
+            // checkBoxLucene
+            // 
+            this.checkBoxLucene.AutoSize = true;
+            this.checkBoxLucene.Font = new System.Drawing.Font("Segoe UI", 18F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(204)));
+            this.checkBoxLucene.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.checkBoxLucene.Location = new System.Drawing.Point(534, 132);
+            this.checkBoxLucene.Name = "checkBoxLucene";
+            this.checkBoxLucene.Size = new System.Drawing.Size(185, 36);
+            this.checkBoxLucene.TabIndex = 15;
+            this.checkBoxLucene.Text = "Lucene search";
+            this.checkBoxLucene.UseVisualStyleBackColor = true;
+            // 
             // SearchForm
             // 
             this.BackColor = System.Drawing.SystemColors.GradientActiveCaption;
-            this.ClientSize = new System.Drawing.Size(784, 443);
+            this.ClientSize = new System.Drawing.Size(784, 470);
+            this.Controls.Add(this.checkBoxLucene);
             this.Controls.Add(this.label3);
             this.Controls.Add(this.luceneButton);
             this.Controls.Add(this.SearchButton);
@@ -141,6 +155,7 @@
         private System.Windows.Forms.Label SearchLabel;
         private System.Windows.Forms.TextBox TextSearch;
         private System.Windows.Forms.Label label3;
+        private System.Windows.Forms.CheckBox checkBoxLucene;
     }
 }
 

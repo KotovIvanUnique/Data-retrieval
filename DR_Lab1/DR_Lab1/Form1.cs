@@ -112,17 +112,6 @@ namespace DR_Lab1
             }
         }
 
-        private static void createMoviesView()
-        {
-            using (var connection = new NpgsqlConnection(connString))
-            {
-                using (var cmd = new NpgsqlCommand("create view movies_v as select id, year,name, substring(name from 1 for length(name)-6) name_cut; ", connection))
-                {
-                    cmd.ExecuteNonQuery();
-                }
-            }
-        }
-
 
         private void luceneButton_Click(object sender, EventArgs e)
         {
@@ -152,7 +141,7 @@ namespace DR_Lab1
                         foreach (var word in source.name.Split(' '))
                         {
                             if (!String.IsNullOrEmpty(word))
-                                doc.Add(new Field("name", word, Field.Store.YES, Field.Index.ANALYZED));
+                                doc.Add(new Field("name_word", word, Field.Store.YES, Field.Index.ANALYZED));
                         }
                         doc.Add(new Field("id", source.id.ToString(), Field.Store.YES, Field.Index.ANALYZED));
                         doc.Add(new Field("year", source.year.ToString(), Field.Store.YES, Field.Index.ANALYZED));
@@ -167,7 +156,6 @@ namespace DR_Lab1
 
             Cursor.Current = Cursors.Default;
         }
-
         private static List<string> getQueryResult(string cmdText)
         {
             List<string> result = new List<string>();
@@ -184,14 +172,13 @@ namespace DR_Lab1
                         Int32 id = reader.GetInt32(0);
                         Int32 year = reader.GetInt32(1);
                         string name = reader.GetString(2);
-                        result.Add(String.Format("id: {0, -8}  year: {1, -7} name: {2, -60} ", id.ToString(), year.ToString(), name));
+                        result.Add(String.Format("id: {0, -16}  year: {1, -10} name: {2, -60} ", id.ToString(), year.ToString(), name));
                     }
                 }
                 conn.Close();
             }
             return result;
         }
-
         private static List<string> searchFullname(string query)
         {
             //по всем словам из названия
@@ -199,43 +186,151 @@ namespace DR_Lab1
             List<string> result = getQueryResult(cmdText);
             return result;
         }
-        private static List<string> searchWordYear(string query, bool withYear=false)
+        private static List<string> searchWordYear(string query, bool withYear = false)
         {
             //поиск по словам и если флаг withYear=true по словам и году
             List<string> result = new List<string>();
             string cmdText = "SELECT * FROM movies WHERE";
             if (withYear)
             {
-                var yearFinder = new Regex(@".+(\d{4}).*");
+                var yearFinder = new Regex(@".*(\d{4}).*");
                 var match = yearFinder.Match(query);
                 var valuesYear = 0;
                 if (match.Success)
                 {
                     valuesYear = int.Parse(match.Groups[1].Value);
-                    cmdText = cmdText + " year = " + valuesYear + " AND ";
-                    query = query.Replace(match.Groups[1].Value, "");
-                }    
+                    query = query.Replace(match.Groups[1].Value, " ");
+                    cmdText = cmdText + " year = " + valuesYear;
+                    cmdText+= (query!=" ") ? " AND " : "";           
+                }
             }
 
             var array = query.Split(' ');
             foreach (var word in array)
             {
+                List<string> newResult = new List<string>();
                 if (!String.IsNullOrEmpty(word))
                 {
-                    var newResult = getQueryResult(cmdText + " REGEXP_REPLACE(name, '\\(\\d{4}\\)', '') ILIKE '%" + word + "%' limit 10");
-                    if (newResult.Capacity != 0)
-                    {
-                        result = result.Concat(newResult).ToList();
-                    }
-
+                    newResult = getQueryResult(cmdText + " REGEXP_REPLACE(name, '\\(\\d{4}\\)', '') ILIKE '%" + word + "%' limit 10");
+                }
+                else if (query == " ")
+                {
+                    newResult = getQueryResult(cmdText  + " limit 10");
+                }
+                if (newResult.Capacity != 0)
+                {
+                    result = result.Concat(newResult).ToList();
                 }
             }
             return result;
-        }
+        }  
+        private static List<string> searchOneWord_Lucene(string query, IndexSearcher searcher)
+        {   //Ищем по одному слову
+            List<string> result_lucene = new List<string>();
+            var array = query.Split(' ');
 
+            var phrase = new MultiPhraseQuery();
+            foreach (var word in array)
+            {
+                phrase = new MultiPhraseQuery();
+                if (!String.IsNullOrEmpty(word))
+                {
+                    phrase.Add(new Term("name_word", word));
+                    var res = searcher.Search(phrase, 10).ScoreDocs;
+                    foreach (var hit in res)
+                    {
+                        var foundDoc = searcher.Doc(hit.Doc);
+                        result_lucene.Add(getFoundDocResult(foundDoc));
+                    }
+                }
+            }
+            return result_lucene;
+        }
+        private static List<string> searchFull_Lucene(string query, IndexSearcher searcher)
+        {   //Ищем полное название
+            List<string> result_lucene = new List<string>();
+            var phrase = new MultiPhraseQuery();
+            phrase.Add(new Term("name", query));
+            var hits = searcher.Search(phrase, 10).ScoreDocs;
+            foreach (var hit in hits)
+            {
+                var foundDoc = searcher.Doc(hit.Doc);
+                result_lucene.Add(getFoundDocResult(foundDoc));
+            }
+            return result_lucene;
+        }
+        private static List<string> searchPartWord_Lucene(string query, IndexSearcher searcher)
+        {   //Ищем части слов
+            List<string> result_lucene = new List<string>();
+            var array = query.Split(' ');
+
+            foreach (var word in array)
+            {
+                if (!String.IsNullOrEmpty(word))
+                {
+                    var wild = new WildcardQuery(new Term("name_word", "*" + word + "*"));
+                    var res = searcher.Search(wild, 10).ScoreDocs;
+                    foreach (var hit in res)
+                    {
+                        var foundDoc = searcher.Doc(hit.Doc);
+                        result_lucene.Add(getFoundDocResult(foundDoc));
+                    }
+                }
+            }
+            return result_lucene;
+        }
+        private static List<string> searchPartWordYear_Lucene(string query, IndexSearcher searcher)
+        {   //Ищем год и часть слова
+            List<string> result_lucene = new List<string>();
+          
+            var yearFinder = new Regex(@".+(\d{4}).*");
+            var match = yearFinder.Match(query);
+            var valuesYear = 0;
+            if (match.Success)
+            {
+                valuesYear = int.Parse(match.Groups[1].Value);
+                query = query.Replace(match.Groups[1].Value, "");
+            }
+
+            var array = query.Split(' ');
+
+            if (valuesYear != 0)
+            {
+                var phrase = new MultiPhraseQuery();
+                foreach (var word in array)
+                {
+                    if (!String.IsNullOrEmpty(word))
+                    {
+                        BooleanQuery booleanQuery = new BooleanQuery();
+                        var wild = new WildcardQuery(new Term("name_word", "*" + word + "*"));
+                        var num = NumericRangeQuery.NewIntRange("year", 1, valuesYear, valuesYear, true, true);
+                        booleanQuery.Add(wild, Occur.MUST);
+                        booleanQuery.Add(num, Occur.MUST);
+                        var res = searcher.Search(booleanQuery, 10).ScoreDocs;
+                        foreach (var hit in res)
+                        {
+                            var foundDoc = searcher.Doc(hit.Doc);
+                            result_lucene.Add(getFoundDocResult(foundDoc));
+                        }
+                    }
+                }
+            }
+            return result_lucene;
+        }
         private void TextSearch_TextChanged(object sender, EventArgs e)
         {
             SearchButton.Enabled = TextSearch.Text == "" ? false : true;
+        }
+        private static string getFoundDocResult(Document foundDoc)
+        {
+            string result;
+
+            result = String.Format("id: {0, -16}  year: {1, -10} name: {2, -60} ",
+                                    foundDoc.GetField("id").StringValue,
+                                    foundDoc.GetField("year").StringValue,
+                                    foundDoc.GetField("name").StringValue);
+
+            return result;
         }
         private void SearchButton_Click(object sender, EventArgs e)
         {
@@ -246,22 +341,46 @@ namespace DR_Lab1
             var query = TextSearch.Text;
             var array = query.Split(' ').ToList();
             List<string> result = new List<string>();
+            List<string> result_lucene = new List<string>();
 
-            var fullResult = searchFullname(query);
-            var wordResult = searchWordYear(query);
-            var wordYearResult = searchWordYear(query, true);
+            try
+            {
+                if (!checkBoxLucene.Checked)
+                {
+                    var fullResult = searchFullname(query);
+                    var wordResult = searchWordYear(query);
+                    var wordYearResult = searchWordYear(query, true);
 
-            result = result.Concat(fullResult).Concat(wordResult).Concat(wordYearResult).ToList();
-            
-            
-            result = result.Select(x => x).Distinct().Take(10).ToList();
-            ResultBox.Items.Clear();
-            foreach (var item in result)
-                ResultBox.Items.Add(item);
+                    result = result.Concat(fullResult).Concat(wordResult).Concat(wordYearResult).ToList();
+                }
+                else
+                {
+                    var searcher = new IndexSearcher(writer.GetReader());
 
-            if (ResultBox.Items.Count == 0)
-                ResultBox.Items.Add("По запросу \'"+query+"\' ничего не найдено.");
+                    var fullResult = searchFull_Lucene(query, searcher);
+                    var oneWordResult = searchOneWord_Lucene(query, searcher);
+                    var partWordResult = searchPartWord_Lucene(query, searcher);
+                    var partWordYearResult = searchPartWordYear_Lucene(query, searcher);
+
+                    result = result.Concat(fullResult).Concat(oneWordResult).Concat(partWordResult).Concat(partWordYearResult).ToList();
+                }
+
+                result = result.Select(x => x).Distinct().Take(10).ToList();
+                ResultBox.Items.Clear();
+                foreach (var item in result)
+                    ResultBox.Items.Add(item);
+
+                if (ResultBox.Items.Count == 0)
+                    ResultBox.Items.Add("Nothing found by request \'" + query + "\' ");
+
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            Cursor.Current = Cursors.Default;
+            SearchButton.Enabled = true;
 
         }
-    }
+    }        
 }
